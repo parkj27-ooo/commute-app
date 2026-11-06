@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>퇴근길 최적 경로 추천</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1d4ed8;
+            --bg-color: #f8fafc;
+            --card-bg: #ffffff;
+            --text-main: #1e293b;
+            --text-sub: #64748b;
+            --border: #e2e8f0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        .container {
+            width: 100%;
+            max-width: 480px;
+        }
+        header {
+            text-align: center;
+            margin-bottom: 24px;
+        }
+        header h1 {
+            font-size: 22px;
+            margin: 0 0 8px 0;
+            color: var(--text-main);
+        }
+        header p {
+            font-size: 14px;
+            color: var(--text-sub);
+            margin: 0;
+        }
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 16px;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+        }
+        .route-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .rank-badge {
+            background: var(--primary);
+            color: white;
+            font-size: 12px;
+            font-weight: 700;
+            padding: 4px 10px;
+            border-radius: 20px;
+        }
+        .time-box {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--primary-dark);
+        }
+        .route-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        .subpath-list {
+            font-size: 13px;
+            color: var(--text-sub);
+            margin-bottom: 16px;
+            background: #f1f5f9;
+            padding: 10px;
+            border-radius: 8px;
+        }
+        .btn-group {
+            display: flex;
+            gap: 8px;
+        }
+        .btn {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: center;
+            text-decoration: none;
+        }
+        .btn-naver { background: #03c75a; color: white; }
+        .btn-kakao { background: #fee500; color: #191919; }
+        .action-main {
+            background: var(--primary);
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+            padding: 16px;
+            width: 100%;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
+        }
+        .action-main:active { background: var(--primary-dark); }
+        .switch-box {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #e2e8f0;
+            padding: 12px 16px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .switch-btn {
+            background: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            color: var(--primary);
+        }
+        #loading {
+            text-align: center;
+            color: var(--text-sub);
+            padding: 40px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header><h1>🚇 실시간 퇴근길 최적 경로</h1><p id="route-desc">삼성화재 본사 ➔ 디에이치방배 101동</p></header>
+
+    <!-- 방향 스위칭 박스 -->
+    <div class="switch-box">
+        <span id="direction-label">🏢 퇴근 방향 (회사 ➔ 집)</span>
+        <button class="switch-btn" onclick="toggleDirection()">방향 전환 🔄</button>
+    </div>
+
+    <!-- 실행 버튼 -->
+    <button class="action-main" onclick="fetchCommuteRoutes()">🚀 지금 출발 시 최적 경로 추천받기</button>
+
+    <!-- 로딩바 -->
+    <div id="loading">실시간 대중교통 경로를 분석 중입니다... ⏱️</div>
+
+    <!-- 결과 리스트 영역 -->
+    <div id="route-results">
+        <div class="card" style="text-align: center; color: var(--text-sub);">
+            버튼을 눌러 실시간 최적 경로를 확인하세요!
+        </div>
+    </div>
+</div>
+
+<script>
+    // 🔗 [중요] 아까 Render에서 배포받은 본인의 백엔드 서버 URL로 수정하세요!
+    const BACKEND_URL = "https://commute-backend-tdcz.onrender.com"; 
+
+    let currentDirection = "WORK_TO_HOME"; // 초기값: 퇴근 (회사 -> 집)
+
+    function toggleDirection() {
+        if (currentDirection === "WORK_TO_HOME") {
+            currentDirection = "HOME_TO_WORK";
+            document.getElementById("direction-label").innerText = "🏠 출근 방향 (집 ➔ 회사)";
+            document.getElementById("route-desc").innerText = "디에이치방배 101동 ➔ 삼성화재 본사";
+        } else {
+            currentDirection = "WORK_TO_HOME";
+            document.getElementById("direction-label").innerText = "🏢 퇴근 방향 (회사 ➔ 집)";
+            document.getElementById("route-desc").innerText = "삼성화재 본사 ➔ 디에이치방배 101동";
+        }
+        fetchCommuteRoutes();
+    }
+
+    async function fetchCommuteRoutes() {
+        const loading = document.getElementById("loading");
+        const resultsContainer = document.getElementById("route-results");
+
+        loading.style.display = "block";
+        resultsContainer.innerHTML = "";
+
+        try {
+            const response = await fetch(`${BACKEND_URL}/api/commute-routes?direction=${currentDirection}`);
+            const data = await response.json();
+
+            if (data.success) {
+                renderRoutes(data.routes, data.origin, data.destination);
+            } else {
+                resultsContainer.innerHTML = `<div class="card" style="color:red; text-align:center;">경로를 불러오지 못했습니다.</div>`;
+            }
+        } catch (error) {
+            console.error("통신 오류:", error);
+            resultsContainer.innerHTML = `<div class="card" style="color:red; text-align:center;">서버와 통신할 수 없습니다. 백엔드 주소를 확인해주세요.</div>`;
+        } finally {
+            loading.style.display = "none";
+        }
+    }
+
+    function renderRoutes(routes, origin, destination) {
+        const container = document.getElementById("route-results");
+        container.innerHTML = "";
+
+        routes.forEach(route => {
+            // 경로 상세 텍스트 조립
+            let subPathText = route.subPaths.map(sp => {
+                if (sp.type === '도보') return `도보 ${sp.sectionTime}분`;
+                return `${sp.lane} (${sp.startName} ➔ ${sp.endName}, ${sp.sectionTime}분)`;
+            }).join(' ➔ ');
+
+            // 지도 앱 딥링크 주소 생성
+            const naverUrl = `https://map.naver.com/v5/directions/${origin.lng},${origin.lat},${encodeURIComponent(origin.name)}/${destination.lng},${destination.lat},${encodeURIComponent(destination.name)}/-/transit`;
+            const kakaoUrl = `https://map.kakao.com/link/to/${encodeURIComponent(destination.name)},${destination.lat},${destination.lng}/from/${encodeURIComponent(origin.name)},${origin.lat},${origin.lng}`;
+        
+            const card = document.createElement("div");
+            card.className = "card";
+            card.innerHTML = `
+                <div class="route-info">
+                    <span class="rank-badge">TOP ${route.rank}</span>
+                    <span class="time-box">약 ${route.totalTime}분</span>
+                </div>
+                <div class="route-title">${route.title}</div>
+                <div class="subpath-list">📍 ${subPathText}</div>
+                <div class="btn-group">
+                    <a href="${naverUrl}" target="_blank" class="btn btn-naver">네이버 지도 보기</a>
+                    <a href="${kakaoUrl}" target="_blank" class="btn btn-kakao">카카오맵 보기</a>
+                </div>
+            `;
+            container.appendChild(card);
+        });
+    }
+</script>
+
+</body>
+</html>
